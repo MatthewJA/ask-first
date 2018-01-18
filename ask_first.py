@@ -9,8 +9,15 @@ The Australian National University
 from __future__ import print_function, division
 
 import argparse
+import collections
 import json
 import os
+import warnings
+
+import astropy.io.fits
+import astropy.wcs
+import numpy
+import scipy.spatial.distance
 
 
 def read_paths(centres_path, first_path):
@@ -30,7 +37,7 @@ def read_paths(centres_path, first_path):
     first_path : str
         Path to the top-level FIRST directory.
     """
-    centre_to_path = {}
+    centre_to_path = collections.defaultdict(list)
     for dirpath, dirnames, filenames in os.walk(first_path):
         for filename in filenames:
             if filename.startswith('.'):
@@ -49,17 +56,75 @@ def read_paths(centres_path, first_path):
             ra *= 360 / 24
             # dec goes straight into degrees.
             dec = int(dec[:3]) + int(dec[3:5]) / 60 + int(dec[5]) / 60 / 60
-            centre = (ra, dec)
+            centre = [ra, dec]
 
             path = os.path.join(dirpath, filename)
             # Filter out the FIRST path (since this is common - saves space).
             path = os.path.relpath(path, first_path)
             # Convert key to str for JSON dump.
-            centre_to_path[str(centre)] = path
+            centre_to_path[str(centre)].append(path)
 
     with open(centres_path, 'w') as output_file:
         json.dump({'first_path': first_path, 'paths': centre_to_path},
                   output_file)
+
+
+def get_image(coord, width, centres_path):
+    """Get an image from FIRST at a coordinate.
+
+    Notes
+    -----
+    This function currently does not support stitching multiple images
+    together, so the image must be within a single image patch.
+
+    Parameters
+    ----------
+    coord : (float, float)
+        Centre of image (RA, dec).
+
+    width : float
+        Width in degrees.
+
+    centres_path : str
+        Path to the centres file output by read_paths.
+
+    Returns
+    -------
+    numpy.ndarray
+    """
+
+    with open(centres_path) as centres_file:
+        centres = json.load(centres_file)
+        paths = centres['paths']
+        first_path = centres['first_path']
+
+    centres = [json.loads(k) for k in paths.keys()]
+    dists = scipy.spatial.distance.cdist([coord], centres)
+    closest = centres[dists.argmin()]
+    path = [os.path.join(first_path, path) for path in paths[str(closest)]]
+    # There are, for some reason, four of these images. I can't find
+    # any documentation on what the difference is between them, so I'll just
+    # pick one ~arbitrarily~.
+    # TODO(MatthewJA): Figure out what to do here properly.
+    path = path[0]
+    with astropy.io.fits.open(path) as fits:
+        header = fits[0].header
+        image = fits[0].data
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            wcs = astropy.wcs.WCS(header).dropaxis(3).dropaxis(2)
+        ra, dec = coord
+        # RA increases to the left.
+        min_ra, max_ra = ra + width / 2, ra - width / 2
+        height = numpy.cos(numpy.deg2rad(dec)) * width
+        min_dec, max_dec = dec - height / 2, dec + height / 2
+        ((min_x, min_y), (max_x, max_y)) = wcs.all_world2pix(
+            ((min_ra, min_dec), (max_ra, max_dec)), 1)
+        assert min_x < max_x
+        assert min_y < max_y
+        patch = image[0, 0, int(min_y):int(max_y), int(min_x):int(max_x)]
+        return patch
+
 
 
 if __name__ == '__main__':
@@ -68,3 +133,4 @@ if __name__ == '__main__':
     parser.add_argument('centres_path', help='Path to store centres')
     args = parser.parse_args()
     read_paths(args.centres_path, args.first_path)
+    # get_image((0, 0), 3 / 60, args.centres_path)
