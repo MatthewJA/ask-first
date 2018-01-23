@@ -20,8 +20,8 @@ import numpy
 import scipy.spatial.distance
 
 
-def read_paths(centres_path, first_path):
-    """Read the paths of the FIRST images into a file.
+def read_paths(first_path):
+    """Read the paths of the FIRST images.
 
     Notes
     -----
@@ -31,11 +31,14 @@ def read_paths(centres_path, first_path):
 
     Parameters
     ----------
-    centres_path : str
-        Path to the output centres file.
-
     first_path : str
         Path to the top-level FIRST directory.
+
+    Returns
+    -------
+    dict
+        Map from (float, float) centre coordinate tuples (in degrees)
+        to str paths to FITS image files centred on those coordinates.
     """
     centre_to_path = collections.defaultdict(list)
     for dirpath, dirnames, filenames in os.walk(first_path):
@@ -59,17 +62,12 @@ def read_paths(centres_path, first_path):
             centre = [ra, dec]
 
             path = os.path.join(dirpath, filename)
-            # Filter out the FIRST path (since this is common - saves space).
-            path = os.path.relpath(path, first_path)
-            # Convert key to str for JSON dump.
-            centre_to_path[str(centre)].append(path)
+            centre_to_path[tuple(centre)].append(path)
 
-    with open(centres_path, 'w') as output_file:
-        json.dump({'first_path': first_path, 'paths': centre_to_path},
-                  output_file)
+    return centre_to_path
 
 
-def get_image(coord, width, centres_path):
+def get_image(coord, width, paths):
     """Get an image from FIRST at a coordinate.
 
     Notes
@@ -85,28 +83,22 @@ def get_image(coord, width, centres_path):
     width : float
         Width in degrees.
 
-    centres_path : str
-        Path to the centres file output by read_paths.
+    paths : dict
+        Map from centre coordinates (in degrees) to FITS filenames.
 
     Returns
     -------
     numpy.ndarray
     """
-
-    with open(centres_path) as centres_file:
-        centres = json.load(centres_file)
-        paths = centres['paths']
-        first_path = centres['first_path']
-
-    centres = [json.loads(k) for k in paths.keys()]
+    centres = list(paths.keys())
     dists = scipy.spatial.distance.cdist([coord], centres)
     closest = centres[dists.argmin()]
-    path = [os.path.join(first_path, path) for path in paths[str(closest)]]
+    assert isinstance(closest, tuple)
     # There are, for some reason, four of these images. I can't find
     # any documentation on what the difference is between them, so I'll just
     # pick one ~arbitrarily~.
     # TODO(MatthewJA): Figure out what to do here properly.
-    path = path[0]
+    path = paths[closest][0]
     with astropy.io.fits.open(path) as fits:
         header = fits[0].header
         image = fits[0].data
@@ -126,11 +118,23 @@ def get_image(coord, width, centres_path):
         return patch
 
 
+def main(first_path, centres_path=None):
+    """Loads paths and caches if a path is provided.
+
+    Parameters
+    ----------
+    first_path : str
+        Path to the top-level FIRST directory.
+    """
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('first_path', help='Path to FIRST data')
-    parser.add_argument('centres_path', help='Path to store centres')
     args = parser.parse_args()
-    read_paths(args.centres_path, args.first_path)
-    # get_image((0, 0), 3 / 60, args.centres_path)
+
+    paths = read_paths(args.first_path)
+    im = get_image((162.5302917, 30.6770889), 3 / 60, paths)
+    import matplotlib.pyplot as plt
+    plt.imshow(im)
+    plt.show()
