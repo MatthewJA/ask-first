@@ -68,6 +68,7 @@ def read_paths(first_path):
             path = os.path.join(dirpath, filename)
             centre_to_path[tuple(centre)].append(path)
 
+    logging.debug('Found %d centres.', len(centre_to_path))
     return centre_to_path
 
 
@@ -130,27 +131,3 @@ def get_image(coord, width, paths):
         assert min_y < max_y
         patch = image[0, 0, int(min_y):int(max_y), int(min_x):int(max_x)]
         return patch
-
-
-def main(first_path, centres_path=None):
-    """Loads paths and caches if a path is provided.
-
-    Parameters
-    ----------
-    first_path : str
-        Path to the top-level FIRST directory.
-    """
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('first_path', help='Path to FIRST data')
-    parser.add_argument('-v', help='Verbose', action='store_true')
-    args = parser.parse_args()
-
-    logging.basicConfig(
-        level=logging.DEBUG if args.v else logging.WARNING,
-        format='%(asctime)s-%(name)s-%(levelname)s: %(message)s')
-
-    paths = read_paths(args.first_path)
-    im = get_image((162.5302917, 30.6770889), 3 / 60, paths)
