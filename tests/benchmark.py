@@ -26,7 +26,10 @@ DATA_PATH = os.path.join(THIS_DIR, 'data')
 random.seed(0)
 logger = logging.getLogger(__name__)
 
-def main():
+def main(step=2):
+    assert step in {0, 1, 2}
+    ra_step = [80, 100, 200][step]  # Must be a factor of 6400.
+
     # We want to pretend to have much more data than we really have for
     # testing and benchmarking because we expect the query time to be
     # non-constant. So we will generate a paths dict mapping centres to paths,
@@ -37,7 +40,7 @@ def main():
     # is in the grid.
     # All of the multiplying by 10 keeps everything as an integer.
     # All values are in arcmin.
-    ras = [ra for ra in range(110, 13800, 200)]
+    ras = [ra for ra in range(110, 13800, ra_step)]
     decs = [dec for dec in range(-53344, 53400, 200)]
     assert 10 * 60 * 10 + 510 in ras
     assert 30 * 60 * 10 + 456 in decs
@@ -67,7 +70,7 @@ def main():
             '10510+30456S.fits',
             '10510+30456T.fits']]
     # Benchmarking: Query the test image 1000 times.
-    logging.info('Beginning benchmarking.')
+    logging.info('Beginning benchmarking with %d centres.', len(centres))
     coords = 162.5302917, 30.6770889
     width = 3 / 60
     times = []
