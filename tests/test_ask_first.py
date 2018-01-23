@@ -28,7 +28,9 @@ class TestGetImage(unittest.TestCase):
         # These coordinates are the defaults for the FIRST cutout server.
         coords = 162.5302917, 30.6770889
         width = 3 / 60
+
         im = ask_first.get_image(coords, width, DATA_PATH)
+
         reference_im = numpy.load(os.path.join(
             DATA_PATH,
             'test_data_162.5302917_30.6770889.npy'))
