@@ -83,14 +83,20 @@ def get_image(coord, width, paths):
     width : float
         Width in degrees.
 
-    paths : dict
-        Map from centre coordinates (in degrees) to FITS filenames.
+    paths : dict | str
+        Map from centre coordinates (in degrees) to FITS filenames OR
+        path to the FIRST data.
 
     Returns
     -------
     numpy.ndarray
     """
-    centres = list(paths.keys())
+    # Handle the dict/str options for the paths argument.
+    try:
+        centres = list(paths.keys())
+    except AttributeError:
+        paths = read_paths(paths)
+        centres = list(paths.keys())
     dists = scipy.spatial.distance.cdist([coord], centres)
     closest = centres[dists.argmin()]
     assert isinstance(closest, tuple)
@@ -135,6 +141,3 @@ if __name__ == '__main__':
 
     paths = read_paths(args.first_path)
     im = get_image((162.5302917, 30.6770889), 3 / 60, paths)
-    import matplotlib.pyplot as plt
-    plt.imshow(im)
-    plt.show()
