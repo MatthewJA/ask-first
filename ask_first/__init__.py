@@ -103,11 +103,13 @@ def get_image(coord, width, paths):
     dists = scipy.spatial.distance.cdist([coord], centres)
     closest = centres[dists.argmin()]
     assert isinstance(closest, tuple)
-    # There are, for some reason, four of these images. I can't find
-    # any documentation on what the difference is between them, so I'll just
-    # pick one ~arbitrarily~.
-    # TODO(MatthewJA): Figure out what to do here properly.
-    path = paths[closest][0]
+    # There are as many as four of these images. This seems to be due to
+    # reimaging. The configuration of the VLA changed for later images so
+    # we will choose the smallest available letter. This is mostly arbitrary
+    # unless one of the letters is at least S, in which case the frequency,
+    # bandpass, and integration time are all different.
+    # TODO(MatthewJA): Figure out a non-arbitrary choice here..
+    path = min(paths[closest])
     logging.debug('Closest path is %s', path)
     with astropy.io.fits.open(path) as fits:
         header = fits[0].header
