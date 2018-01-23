@@ -6,6 +6,6 @@ setup(name='ask_first',
       url='http://github.com/MatthewJA/ask-first',
       author='Matthew Alger',
       author_email='matthew.alger@anu.edu.au',
-      license='BSD-3',
+      license='License :: OSI Approved :: BSD License',
       packages=['ask_first'],
       zip_safe=False)
