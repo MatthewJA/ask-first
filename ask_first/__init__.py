@@ -68,7 +68,7 @@ def read_paths(first_path):
             path = os.path.join(dirpath, filename)
             centre_to_path[tuple(centre)].append(path)
 
-    logging.debug('Found %d centres.', len(centre_to_path))
+    logger.debug('Found %d centres.', len(centre_to_path))
     return centre_to_path
 
 
@@ -102,7 +102,7 @@ def get_image(coord, width, paths):
     except AttributeError:
         paths = read_paths(paths)
         centres = list(paths.keys())
-    logging.debug('Querying (%f, %f).', coord[0], coord[1])
+    logger.debug('Querying (%f, %f).', coord[0], coord[1])
     dists = scipy.spatial.distance.cdist([coord], centres)
     closest = centres[dists.argmin()]
     assert isinstance(closest, tuple)
@@ -113,7 +113,7 @@ def get_image(coord, width, paths):
     # bandpass, and integration time are all different.
     # TODO(MatthewJA): Figure out a non-arbitrary choice here..
     path = min(paths[closest])
-    logging.debug('Closest path is %s', path)
+    logger.debug('Closest path is %s', path)
     with astropy.io.fits.open(path) as fits:
         header = fits[0].header
         image = fits[0].data

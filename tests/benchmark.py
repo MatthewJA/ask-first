@@ -52,7 +52,7 @@ def main(step=2):
                                     str(abs(dec) % 600).zfill(3)))
                for ra in ras for dec in decs]
     assert ((162.75, 30.759999999999998), '10510+30456') in centres
-    logging.debug('Generated %d centres.', len(centres))
+    logger.debug('Generated %d centres.', len(centres))
     paths = {}
     for centre, centre_str in centres:
         # This fakes the epoch multiplicity.
@@ -61,7 +61,7 @@ def main(step=2):
                              '{}{}.fits'.format(centre_str, epoch))
                 for epoch in epochs]
         paths[centre] = path
-    logging.debug('Generated paths.')
+    logger.debug('Generated paths.')
     # Now ensure that the real path is included.
     paths[162.75, 30.759999999999998] = [
         os.path.join(DATA_PATH, '10510', p) for p in [
@@ -70,7 +70,7 @@ def main(step=2):
             '10510+30456S.fits',
             '10510+30456T.fits']]
     # Benchmarking: Query the test image 1000 times.
-    logging.info('Beginning benchmarking with %d centres.', len(centres))
+    logger.info('Beginning benchmarking with %d centres.', len(centres))
     coords = 162.5302917, 30.6770889
     width = 3 / 60
     times = []
@@ -78,7 +78,7 @@ def main(step=2):
         t = time.time()
         im = ask_first.get_image(coords, width, paths)
         times.append(time.time() - t)
-    logging.info('Done benchmarking.')
+    logger.info('Done benchmarking.')
     print('Average time: {} +- {} seconds'.format(
         statistics.mean(times), statistics.stdev(times)))
 
