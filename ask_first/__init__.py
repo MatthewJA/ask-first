@@ -53,15 +53,16 @@ def read_paths(first_path):
                 continue
 
             # Filenames are of the form 09210-07233R.fits.
+            # This is HHMMMSDDMMME.
             # Get the centre by slicing the filename.
             ra, dec = filename[:5], filename[5:11]
             # Convert the centre into a more useful form, i.e. degrees.
             # Into hours...
-            ra = int(ra[:2]) + int(ra[2:4]) / 60 + int(ra[4]) / 60 / 60
+            ra = int(ra[:2]) + int(ra[2:4]) / 60 + int(ra[4]) / 10 / 60
             # ...Then into degrees.
             ra *= 360 / 24
             # dec goes straight into degrees.
-            dec = int(dec[:3]) + int(dec[3:5]) / 60 + int(dec[5]) / 60 / 60
+            dec = int(dec[:3]) + int(dec[3:5]) / 60 + int(dec[5]) / 10 / 60
             centre = [ra, dec]
 
             path = os.path.join(dirpath, filename)
@@ -100,6 +101,7 @@ def get_image(coord, width, paths):
     except AttributeError:
         paths = read_paths(paths)
         centres = list(paths.keys())
+    logging.debug('Querying (%f, %f).', coord[0], coord[1])
     dists = scipy.spatial.distance.cdist([coord], centres)
     closest = centres[dists.argmin()]
     assert isinstance(closest, tuple)
