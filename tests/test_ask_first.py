@@ -25,6 +25,7 @@ DATA_PATH = os.path.join(THIS_DIR, 'data')
 class TestGetImage(unittest.TestCase):
 
     def test(self):
+        """get_image retrieves an image."""
         # These coordinates are the defaults for the FIRST cutout server.
         coords = 162.5302917, 30.6770889
         width = 3 / 60
@@ -36,10 +37,25 @@ class TestGetImage(unittest.TestCase):
             'test_data_162.5302917_30.6770889.npy'))
         numpy.testing.assert_allclose(reference_im, im)
 
+    def test_field(self):
+        """get_image retrieves an image with a specified field."""
+        # These coordinates are the defaults for the FIRST cutout server.
+        coords = 162.5302917, 30.6770889
+        width = 3 / 60
+
+        im = ask_first.get_image(coords, width, DATA_PATH,
+                                 field='10510+30456E')
+
+        reference_im = numpy.load(os.path.join(
+            DATA_PATH,
+            'test_data_162.5302917_30.6770889.npy'))
+        numpy.testing.assert_allclose(reference_im, im)
+
 
 class TestReadCatalogue(unittest.TestCase):
 
     def test(self):
+        """read_catalogue reads the catalogue."""
         cat = ask_first.read_catalogue(os.path.join(
             DATA_PATH,
             'test_catalog_14dec17.bin'))

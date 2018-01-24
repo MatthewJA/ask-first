@@ -73,7 +73,7 @@ def read_paths(first_path):
     return centre_to_path
 
 
-def get_image(coord, width, paths):
+def get_image(coord, width, paths, field=None):
     """Get an image from FIRST at a coordinate.
 
     Notes
@@ -93,28 +93,40 @@ def get_image(coord, width, paths):
         Map from centre coordinates (in degrees) to FITS filenames OR
         path to the FIRST data.
 
+    field : str
+        Optional. Field name that the image should be obtained from. If you
+        know the field already, this speeds up the retrieval. If specified,
+        `paths` must be a str.
+
     Returns
     -------
     numpy.ndarray
     """
-    # Handle the dict/str options for the paths argument.
-    try:
-        centres = list(paths.keys())
-    except AttributeError:
-        paths = read_paths(paths)
-        centres = list(paths.keys())
-    logger.debug('Querying (%f, %f).', coord[0], coord[1])
-    dists = scipy.spatial.distance.cdist([coord], centres)
-    closest = centres[dists.argmin()]
-    assert isinstance(closest, tuple)
-    # There are as many as four of these images. This seems to be due to
-    # reimaging. The configuration of the VLA changed for later images so
-    # we will choose the smallest available letter. This is mostly arbitrary
-    # unless one of the letters is at least S, in which case the frequency,
-    # bandpass, and integration time are all different.
-    # TODO(MatthewJA): Figure out a non-arbitrary choice here..
-    path = min(paths[closest])
-    logger.debug('Closest path is %s', path)
+    if field is not None and isinstance(paths, dict):
+        raise ValueError('field must be None if paths is a dict')
+
+    if field is None:
+        # Handle the dict/str options for the paths argument.
+        try:
+            centres = list(paths.keys())
+        except AttributeError:
+            paths = read_paths(paths)
+            centres = list(paths.keys())
+        logger.debug('Querying (%f, %f).', coord[0], coord[1])
+        dists = scipy.spatial.distance.cdist([coord], centres)
+        closest = centres[dists.argmin()]
+        assert isinstance(closest, tuple)
+        # There are as many as four of these images. This seems to be due to
+        # reimaging. The configuration of the VLA changed for later images so
+        # we will choose the smallest available letter. This is mostly arbitrary
+        # unless one of the letters is at least S, in which case the frequency,
+        # bandpass, and integration time are all different.
+        # TODO(MatthewJA): Figure out a non-arbitrary choice here..
+        path = min(paths[closest])
+        logger.debug('Closest path is %s', path)
+    else:
+        path = os.path.join(paths, field[:5], field + '.fits')
+
     with astropy.io.fits.open(path) as fits:
         header = fits[0].header
         image = fits[0].data
