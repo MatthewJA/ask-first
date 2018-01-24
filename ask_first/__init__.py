@@ -18,6 +18,7 @@ import warnings
 import astropy.io.fits
 import astropy.wcs
 import numpy
+import pandas
 import scipy.spatial.distance
 
 logger = logging.getLogger(__name__)
@@ -131,3 +132,37 @@ def get_image(coord, width, paths):
         assert min_y < max_y
         patch = image[0, 0, int(min_y):int(max_y), int(min_x):int(max_x)]
         return patch
+
+
+def read_catalogue(catalogue_path):
+    """Read the FIRST catalogue.
+
+    Parameters
+    ----------
+    catalogue_path : str
+        Path to FIRST catalogue (decompressed ASCII file).
+
+    Returns
+    -------
+    DataFrame
+        Pandas dataframe of catalogue.
+    """
+    cat = pandas.read_fwf(
+        catalogue_path, widths=[
+            12, 13, 6, 9, 10, 8, 7, 7, 6, 7, 7,
+            6, 13, 3, 6, 6, 2, 3, 6, 6, 9, 10, 10],
+        header=1, skiprows=0)
+    cat.rename(columns={
+        '# RA': 'RA',
+        '#': 'SDSS #',
+        'Sep': 'SDSS Sep',
+        'i': 'SDSS i',
+        'Cl': 'SDSS Cl',
+        '#.1': '2MASS #',
+        'Sep.1': '2MASS Sep',
+        'K': '2MASS K',
+        'Mean-yr': 'Epoch Mean-yr',
+        'Mean-MJD': 'Epoch Mean-MJD',
+        'rms-MJD': 'Epoch rms-MJD',
+    }, inplace=True)
+    return cat

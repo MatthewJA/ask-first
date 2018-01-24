@@ -37,5 +37,15 @@ class TestGetImage(unittest.TestCase):
         numpy.testing.assert_allclose(reference_im, im)
 
 
+class TestReadCatalogue(unittest.TestCase):
+
+    def test(self):
+        cat = ask_first.read_catalogue(os.path.join(
+            DATA_PATH,
+            'test_catalog_14dec17.bin'))
+        self.assertEqual(len(cat), 27)
+        self.assertTrue(all(cat['Field'] == '10510+30456E'))
+
+
 if __name__ == '__main__':
     unittest.main()
