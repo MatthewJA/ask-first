@@ -30,21 +30,22 @@ class TestGetImage(unittest.TestCase):
         coords = 162.5302917, 30.6770889
         width = 3 / 60
 
-        im = ask_first.get_image(coords, width, DATA_PATH)
+        im = ask_first.get_image(
+            coords, width, DATA_PATH, os.path.join(DATA_PATH, 'img.tbl'))
 
         reference_im = numpy.load(os.path.join(
             DATA_PATH,
             'test_data_162.5302917_30.6770889.npy'))
         numpy.testing.assert_allclose(reference_im, im)
 
-    def test_field(self):
-        """get_image retrieves an image with a specified field."""
+    def test_str_coord(self):
+        """get_image retrieves an image when given str coords."""
         # These coordinates are the defaults for the FIRST cutout server.
-        coords = 162.5302917, 30.6770889
+        coords = '10 50 07.270 +30 40 37.52'
         width = 3 / 60
 
-        im = ask_first.get_image(coords, width, DATA_PATH,
-                                 field='10510+30456E')
+        im = ask_first.get_image(
+            coords, width, DATA_PATH, os.path.join(DATA_PATH, 'img.tbl'))
 
         reference_im = numpy.load(os.path.join(
             DATA_PATH,
@@ -61,6 +62,7 @@ class TestReadCatalogue(unittest.TestCase):
             'test_catalog_14dec17.bin'))
         self.assertEqual(len(cat), 27)
         self.assertTrue(all(cat['Field'] == '10510+30456E'))
+        self.assertIn('RA', cat.columns)
 
 
 if __name__ == '__main__':

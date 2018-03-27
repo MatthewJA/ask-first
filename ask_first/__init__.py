@@ -13,12 +13,14 @@ import collections
 import json
 import logging
 import os
+import subprocess
+import tempfile
 import warnings
 
 import astropy.coordinates
+import astropy.io.ascii
 import astropy.io.fits
 import astropy.wcs
-import montage_wrapper as montage
 import numpy
 import pandas
 import scipy.spatial.distance
@@ -26,62 +28,28 @@ import scipy.spatial.distance
 logger = logging.getLogger(__name__)
 
 
-def read_paths(first_path):
-    """Read the paths of the FIRST images.
-
-    Notes
-    -----
-    This function is necessary so we can pre-generate a list of centres
-    based on the filenames. The fact we are aggregating paths instead of
-    centres is just a convenience.
+def make_image_table(first_path, image_table_path):
+    """Generates an image metadata table if it doesn't exist.
 
     Parameters
     ----------
     first_path : str
-        Path to the top-level FIRST directory.
+        Path to FIRST data.
 
-    Returns
-    -------
-    dict
-        Map from (float, float) centre coordinate tuples (in degrees)
-        to str paths to FITS image files centred on those coordinates.
+    image_table_path : str
+        Path to write image metadata table.
     """
-    centre_to_path = collections.defaultdict(list)
-    for dirpath, dirnames, filenames in os.walk(first_path):
-        for filename in filenames:
-            if filename.startswith('.'):
-                continue
-
-            if not filename.endswith('.fits'):
-                continue
-
-            # Filenames are of the form 09210-07233R.fits.
-            # This is HHMMMSDDMMME.
-            # Get the centre by slicing the filename.
-            ra, dec = filename[:5], filename[5:11]
-            # Convert the centre into a more useful form, i.e. degrees.
-            # Into hours...
-            ra = int(ra[:2]) + int(ra[2:4]) / 60 + int(ra[4]) / 10 / 60
-            # ...Then into degrees.
-            ra *= 360 / 24
-            # dec goes straight into degrees.
-            dec = int(dec[:3]) + int(dec[3:5]) / 60 + int(dec[5]) / 10 / 60
-            centre = [ra, dec]
-
-            path = os.path.join(dirpath, filename)
-            centre_to_path[tuple(centre)].append(path)
-
-    logger.debug('Found %d centres.', len(centre_to_path))
-    return centre_to_path
+    subprocess.run([
+        'mImgtbl',
+        '-r',  # recursive
+        '-c',  # corners
+        first_path,
+        image_table_path,
+    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
-def get_image(coord, width, paths, field=None):
+def get_image(coord, width, first_path, image_table_path):
     """Get an image from FIRST at a coordinate.
-
-    Notes
-    -----
-    This function currently does not support stitching multiple images
-    together, so the image must be within a single image patch.
 
     Parameters
     ----------
@@ -91,14 +59,12 @@ def get_image(coord, width, paths, field=None):
     width : float
         Width in degrees.
 
-    paths : dict | str
-        Map from centre coordinates (in degrees) to FITS filenames OR
-        path to the FIRST data.
+    first_path : str
+        Path to FIRST data.
 
-    field : str
-        Optional. Field name that the image should be obtained from. If you
-        know the field already, this speeds up the retrieval. If specified,
-        `paths` must be a str.
+    image_table_path : str
+        Path to image metadata table. Will be created if it doesn't
+        already exist.
 
     Returns
     -------
@@ -107,48 +73,64 @@ def get_image(coord, width, paths, field=None):
     if isinstance(coord, str):
         coord = astropy.coordinates.SkyCoord(coord, unit=('hour', 'deg'))
         coord = (coord.ra.deg, coord.dec.deg)
-    if field is not None and isinstance(paths, dict):
-        raise ValueError('field must be None if paths is a dict')
 
-    if field is None:
-        # Handle the dict/str options for the paths argument.
-        try:
-            centres = list(paths.keys())
-        except AttributeError:
-            paths = read_paths(paths)
-            centres = list(paths.keys())
-        logger.debug('Querying (%f, %f).', coord[0], coord[1])
-        dists = scipy.spatial.distance.cdist([coord], centres)
-        closest = centres[dists.argmin()]
-        assert isinstance(closest, tuple)
-        # There are as many as four of these images. This seems to be due to
-        # reimaging. The configuration of the VLA changed for later images so
-        # we will choose the smallest available letter. This is mostly arbitrary
-        # unless one of the letters is at least S, in which case the frequency,
-        # bandpass, and integration time are all different.
-        # TODO(MatthewJA): Figure out a non-arbitrary choice here..
-        path = min(paths[closest])
-        logger.debug('Closest path is %s', path)
-    else:
-        path = os.path.join(paths, field[:5], field + '.fits')
+    make_image_table(first_path, image_table_path)
 
-    with astropy.io.fits.open(path) as fits:
-        header = fits[0].header
-        image = fits[0].data
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore')
-            wcs = astropy.wcs.WCS(header).dropaxis(3).dropaxis(2)
-        ra, dec = coord
-        # RA increases to the left.
-        min_ra, max_ra = ra + width / 2, ra - width / 2
-        height = numpy.cos(numpy.deg2rad(dec)) * width
-        min_dec, max_dec = dec - height / 2, dec + height / 2
-        ((min_x, min_y), (max_x, max_y)) = wcs.all_world2pix(
-            ((min_ra, min_dec), (max_ra, max_dec)), 1)
-        assert min_x < max_x
-        assert min_y < max_y
-        patch = image[0, 0, int(min_y):int(max_y), int(min_x):int(max_x)]
-        return patch
+    # Get coverage information.
+    with tempfile.NamedTemporaryFile() as coverage_file, \
+            tempfile.NamedTemporaryFile() as out_file:
+            # tempfile.NamedTemporaryFile() as header_file, \
+        coverage_filename = coverage_file.name
+        out_filename = out_file.name
+        # header_filename = header_file.name
+
+        subprocess.run([
+            # For some reason mCoverageCheck fails unless it has two
+            # initial dummy arguments. These can be pretty much anything
+            # except -s and probably some other stuff but I've gone with 0
+            # and 0.
+            'mCoverageCheck', '0', '0',
+            image_table_path, coverage_filename, '-box',
+            str(coord[0]), str(coord[1]), str(width)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # Confirm there's only one image containing this object
+        # (i.e. no mosaic required).
+        _coverage_data = coverage_file.read()
+        assert _coverage_data.count(b'\n') == 4, _coverage_data
+
+        # Get the source filename.
+        coverage_file.seek(0)
+        in_filename = astropy.io.ascii.read(coverage_file)['fname'][0]
+
+        # Generate a cutout.
+        subprocess.run([
+            'mSubimage',
+            os.path.join(first_path, in_filename),
+            out_filename,
+            str(coord[0]), str(coord[1]), str(width)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        return astropy.io.fits.getdata(out_filename)
+
+        # TODO(MatthewJA): Add mosaicing.
+        # Here's the outline:
+        # # Coverage information is now stored in the coverage file.
+        # # Mosaic the images. First we make a FITS header.
+        # subprocess.run([
+        #     'mMakeHdr',
+        #     coverage_filename,
+        #     header_filename])
+
+        # # Then we can mosaic the images with this header as a template.
+        # subprocess.run([
+        #     'mAdd',
+        #     '-p', first_path,
+        #     '-a', 'mean',
+        #     coverage_filename,
+        #     header_filename,
+        #     out_filename])
+
+        # ...But this segfaults.
 
 
 def read_catalogue(catalogue_path):
