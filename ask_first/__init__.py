@@ -15,8 +15,10 @@ import logging
 import os
 import warnings
 
+import astropy.coordinates
 import astropy.io.fits
 import astropy.wcs
+import montage_wrapper as montage
 import numpy
 import pandas
 import scipy.spatial.distance
@@ -83,8 +85,8 @@ def get_image(coord, width, paths, field=None):
 
     Parameters
     ----------
-    coord : (float, float)
-        Centre of image (RA, dec).
+    coord : (float, float) | str
+        Centre of image (RA, dec) or HHMMSS.S-DDMMSS.S string.
 
     width : float
         Width in degrees.
@@ -102,6 +104,9 @@ def get_image(coord, width, paths, field=None):
     -------
     numpy.ndarray
     """
+    if isinstance(coord, str):
+        coord = astropy.coordinates.SkyCoord(coord, unit=('hour', 'deg'))
+        coord = (coord.ra.deg, coord.dec.deg)
     if field is not None and isinstance(paths, dict):
         raise ValueError('field must be None if paths is a dict')
 
@@ -165,7 +170,7 @@ def read_catalogue(catalogue_path):
             6, 13, 3, 6, 6, 2, 3, 6, 6, 9, 10, 10],
         header=1, skiprows=0)
     cat.rename(columns={
-        '# RA': 'RA',
+        '#  RA': 'RA',
         '#': 'SDSS #',
         'Sep': 'SDSS Sep',
         'i': 'SDSS i',
