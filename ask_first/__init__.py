@@ -39,16 +39,18 @@ def make_image_table(first_path, image_table_path):
     image_table_path : str
         Path to write image metadata table.
     """
-    subprocess.run([
-        'mImgtbl',
-        '-r',  # recursive
-        '-c',  # corners
-        first_path,
-        image_table_path,
-    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if not os.path.exists(image_table_path):
+        subprocess.run([
+            'mImgtbl',
+            '-r',  # recursive
+            '-c',  # corners
+            first_path,
+            image_table_path,
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
-def get_image(coord, width, first_path, image_table_path):
+def get_image(coord, width, first_path, image_table_path,
+              fits=False):
     """Get an image from FIRST at a coordinate.
 
     Parameters
@@ -66,9 +68,12 @@ def get_image(coord, width, first_path, image_table_path):
         Path to image metadata table. Will be created if it doesn't
         already exist.
 
+    fits : bool
+        Whether to return FITS instead of NumPy.
+
     Returns
     -------
-    numpy.ndarray
+    numpy.ndarray or FITS
     """
     if isinstance(coord, str):
         coord = astropy.coordinates.SkyCoord(coord, unit=('hour', 'deg'))
@@ -78,7 +83,7 @@ def get_image(coord, width, first_path, image_table_path):
 
     # Get coverage information.
     with tempfile.NamedTemporaryFile() as coverage_file, \
-            tempfile.NamedTemporaryFile() as out_file:
+            tempfile.NamedTemporaryFile(delete=True) as out_file:
             # tempfile.NamedTemporaryFile() as header_file, \
         coverage_filename = coverage_file.name
         out_filename = out_file.name
@@ -96,21 +101,33 @@ def get_image(coord, width, first_path, image_table_path):
         # Confirm there's only one image containing this object
         # (i.e. no mosaic required).
         _coverage_data = coverage_file.read()
-        assert _coverage_data.count(b'\n') == 4, _coverage_data
+
+        if not _coverage_data.count(b'\n') == 4:
+            logger.debug('More than one file in coverage')
 
         # Get the source filename.
         coverage_file.seek(0)
-        in_filename = astropy.io.ascii.read(coverage_file)['fname'][0]
+        filenames = astropy.io.ascii.read(coverage_file)['fname']
 
-        # Generate a cutout.
-        subprocess.run([
-            'mSubimage',
-            os.path.join(first_path, in_filename),
-            out_filename,
-            str(coord[0]), str(coord[1]), str(width)],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        for in_filename in filenames:
+            # Generate a cutout.
+            subprocess.run([
+                'mSubimage',
+                os.path.join(first_path, in_filename),
+                out_filename,
+                str(coord[0]), str(coord[1]), str(width)],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-        return astropy.io.fits.getdata(out_filename)
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    if not fits:
+                        return astropy.io.fits.getdata(out_filename)
+                    return astropy.io.fits.open(out_filename)
+            except IOError:
+                continue
+
+        raise IOError('Empty or corrupt fits files')
 
         # TODO(MatthewJA): Add mosaicing.
         # Here's the outline:
